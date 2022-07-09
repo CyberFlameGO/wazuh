@@ -14,6 +14,15 @@ uname_P := $(shell sh -c 'uname -p 2>/dev/null || echo not')
 uname_R := $(shell sh -c 'uname -r 2>/dev/null || echo not')
 uname_V := $(shell sh -c 'uname -v 2>/dev/null || echo not')
 uname_M := $(shell sh -c 'uname -m 2>/dev/null || echo not')
+ifneq (${uname_S},Darwin)
+ifneq ($(findstring BSD,${uname_S}), BSD)
+libstdc++_path := $(shell sh -c 'g++ --print-file-name=libstdc++.so.6 2>/dev/null || echo not')
+libgcc_s_path := $(shell sh -c 'g++ --print-file-name=libgcc_s.so.1 2>/dev/null || echo not')
+LIBSTDC++_NAME := libstdc++.so.6
+LIBGCC_S_NAME := libgcc_s.so.1
+CPPLIBDEPS := ${LIBSTDC++_NAME} ${LIBGCC_S_NAME}
+endif
+endif
 HAS_CHECKMODULE = $(shell command -v checkmodule > /dev/null && echo YES)
 HAS_SEMODULE_PACKAGE = $(shell command -v semodule_package > /dev/null && echo YES)
 CHECK_ARCHLINUX := $(shell sh -c 'grep "Arch Linux" /etc/os-release > /dev/null && echo YES || echo not')
@@ -686,40 +695,38 @@ ifeq (,$(filter ${DISABLE_SYSC},YES yes y Y 1))
 BUILD_CMAKE_PROJECTS+=build_syscollector
 endif
 
+libstdc++.so.6: ${libstdc++_path}
+	cp $< $@
+	strip -x $@
+
+libgcc_s.so.1: ${libgcc_s_path}
+	cp $< $@
+	strip -x $@
 
 .PHONY: server local hybrid agent selinux
 
 ifeq (${MAKECMDGOALS},server)
 $(error Do not use 'server' directly, use 'TARGET=server')
 endif
-server: external
-ifneq (${uname_S},HP-UX)
-	${MAKE} ${BUILD_CMAKE_PROJECTS}
-endif
-	${MAKE} ${BUILD_SERVER}
+server: external ${CPPLIBDEPS}
+	${MAKE} ${BUILD_SERVER} ${BUILD_CMAKE_PROJECTS}
 
 ifeq (${MAKECMDGOALS},local)
 $(error Do not use 'local' directly, use 'TARGET=local')
 endif
-local: external
-ifneq (${uname_S},HP-UX)
-	${MAKE} ${BUILD_CMAKE_PROJECTS}
-endif
-	${MAKE} ${BUILD_SERVER}
+local: external ${CPPLIBDEPS}
+	${MAKE} ${BUILD_SERVER} ${BUILD_CMAKE_PROJECTS}
 
 ifeq (${MAKECMDGOALS},hybrid)
 $(error Do not use 'hybrid' directly, use 'TARGET=hybrid')
 endif
-hybrid: external
-ifneq (${uname_S},HP-UX)
-	${MAKE} ${BUILD_CMAKE_PROJECTS}
-endif
-	${MAKE} ${BUILD_SERVER}
+hybrid: external ${CPPLIBDEPS}
+	${MAKE} ${BUILD_SERVER} ${BUILD_CMAKE_PROJECTS}
 
 ifeq (${MAKECMDGOALS},agent)
 $(error Do not use 'agent' directly, use 'TARGET=agent')
 endif
-agent: external
+agent: external ${CPPLIBDEPS}
 ifneq (${uname_S},HP-UX)
 	${MAKE} ${BUILD_CMAKE_PROJECTS}
 endif
@@ -2399,6 +2406,8 @@ clean-internals: clean-unit-tests
 	rm -rf $(SYSCOLLECTOR)build
 	rm -rf $(SYSINFO)build
 	rm -rf libwazuhext
+	rm -rf libgcc_s.so.1
+	rm -rf libstdc++.so.6
 
 clean-unit-tests:
 	rm -f ${wrappers_syscheck_o}
